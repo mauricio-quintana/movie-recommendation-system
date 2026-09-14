@@ -1,9 +1,9 @@
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from './../src/app.module.js';
 
-describe('AppController (e2e)', () => {
+describe('Health check (e2e)', () => {
   let app: INestApplication;
 
   beforeEach(async () => {
@@ -12,14 +12,28 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+
+    app.setGlobalPrefix('api');
+
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  it('GET /api/health', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/api/health')
       .expect(200)
-      .expect('Hello World!');
+      .expect(({ body }) => {
+        expect(body.status).toBe('ok');
+        expect(body.details.memory_heap.status).toBe('up');
+      });
   });
 
   afterEach(async () => {

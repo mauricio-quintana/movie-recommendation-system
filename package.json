@@ -15,7 +15,9 @@
     "test": "pnpm --recursive run test",
     "test:e2e": "pnpm --filter backend run test:e2e",
     "build": "pnpm --recursive run build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:watch": "pnpm --recursive --parallel run test:watch",
+    "test:coverage": "pnpm --recursive run test:coverage"
   },
   "devDependencies": {
     "eslint-config-prettier": "^10.1.8",
