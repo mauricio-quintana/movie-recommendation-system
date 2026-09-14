@@ -11,10 +11,13 @@
     "typecheck": "pnpm --recursive run typecheck",
     "test": "pnpm --recursive run test",
     "test:e2e": "pnpm --filter backend run test:e2e",
-    "build": "pnpm --recursive run build"
+    "build": "pnpm --recursive run build",
+    "prepare": "husky"
   },
   "devDependencies": {
     "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
     "prettier": "^3.9.6"
   }
 }
