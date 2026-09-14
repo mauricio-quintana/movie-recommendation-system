@@ -1,0 +1,20 @@
+{
+  "name": "instant-movies",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.27.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter web --filter backend run dev",
+    "lint": "pnpm --recursive run lint",
+    "format": "pnpm --recursive run format",
+    "format:check": "pnpm --recursive run format:check",
+    "typecheck": "pnpm --recursive run typecheck",
+    "test": "pnpm --recursive run test",
+    "test:e2e": "pnpm --filter backend run test:e2e",
+    "build": "pnpm --recursive run build"
+  },
+  "devDependencies": {
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6"
+  }
+}
