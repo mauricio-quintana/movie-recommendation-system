@@ -1,5 +1,5 @@
 {
-  "name": "instant-movies",
+  "name": "movie-recommendation-system",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.27.0",
