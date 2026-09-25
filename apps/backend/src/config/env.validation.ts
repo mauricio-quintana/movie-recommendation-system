@@ -18,4 +18,8 @@ export const envValidationSchema = Joi.object({
   GROQ_API_KEY: Joi.string().min(1).required(),
 
   BETTER_AUTH_SECRET: Joi.string().min(32).required(),
+
+  FRONTEND_URL: Joi.string().uri().required(),
+
+  BETTER_AUTH_URL: Joi.string().uri().required(),
 });
