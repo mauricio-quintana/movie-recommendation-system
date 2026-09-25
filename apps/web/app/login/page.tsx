@@ -4,7 +4,7 @@ import { AuthForm } from '@/components/auth-form';
 import { getSession } from '@/lib/api';
 import { safeNextPath } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'Sign in' };
+export const metadata: Metadata = { title: 'Ingresar' };
 
 export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   const next = safeNextPath((await searchParams).next);

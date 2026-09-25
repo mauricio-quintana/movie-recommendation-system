@@ -248,8 +248,10 @@ DLQ:
 Decisiones de implementación:
 
 - Las colas son **quorum queues** durables (el tipo replicado que recomienda RabbitMQ). `recommendation.commands` hace dead-lettering hacia `recommendation.commands.dlq` por el exchange por defecto y tiene `x-delivery-limit` = 10 como red de seguridad para mensajes que tumban al worker.
-- **Backoff sin colas extra**: ante un fallo recuperable, el worker devuelve la recomendación a `PENDING` y crea, en la misma transacción, un `OutboxEvent` con `availableAt` en el futuro (exponencial con jitter, respetando `Retry-After`). Luego hace ACK. El reintento es durable y no añade topología.
-- Máximo de intentos: `RECOMMENDATION_MAX_ATTEMPTS` (3 por defecto). Al agotarse: `FAILED` + DLQ.
+- **Espera durable sin colas extra**: para volver a procesar más tarde, el worker devuelve la recomendación a `PENDING` y crea, en la misma transacción, un `OutboxEvent` con `availableAt` en el futuro. Luego hace ACK. No añade topología.
+- **Proveedor no disponible = esperar, no fallar**: los fallos transitorios de Groq (429, 5xx, timeout, red) o del rate limiter no consumen intentos. La recomendación queda `PENDING` hasta que Groq vuelva. El primer fallo abre una **pausa compartida en Redis** (`groq:unavailable:until`), con backoff exponencial de 5 s a 5 min por fallos consecutivos que respeta `Retry-After`. Mientras dura, ningún worker llama a Groq: todas las recomendaciones, de todos los usuarios, se reprograman para cuando termine, con jitter para no despertar juntas. El primer éxito borra la pausa.
+- **Plazo máximo**: una recomendación solo se cancela si no pudo generarse dentro de `RECOMMENDATION_MAX_WAIT_MINUTES` (30 min por defecto) desde la solicitud: `FAILED` (`PROVIDER_UNAVAILABLE`) + DLQ.
+- `RECOMMENDATION_MAX_ATTEMPTS` (3 por defecto) solo acota reclamos tras caídas del worker (lease vencido): `FAILED` (`ATTEMPTS_EXHAUSTED`) + DLQ.
 - Fallos no recuperables (salida inválida del modelo, credenciales, request rechazado): `FAILED` inmediato + DLQ.
 - Errores de infraestructura inesperados (p. ej. PostgreSQL caído): `nack` con requeue tras una pausa de 5 s.
 - Si se pierde la conexión AMQP, el worker termina y Docker lo reinicia (`restart: unless-stopped`). Los mensajes sin ACK se reentregan.
@@ -265,7 +267,7 @@ No implementar un bucket separado en memoria local.
 Implementación: ventana fija de 60 s con `INCR` + `PEXPIRE` atómicos (script Lua) sobre `ratelimit:groq`, con límite `GROQ_RATE_LIMIT_PER_MINUTE`.
 
 - Si el límite se alcanza, la recomendación se pospone hasta que termine la ventana sin consumir un intento.
-- Si Redis no responde, se falla cerrado: Groq no se llama y el intento cuenta como fallo recuperable.
+- Si Redis no responde, se falla cerrado: Groq no se llama y la recomendación espera en la cola sin consumir intentos.
 
 La ventana fija puede permitir ráfagas en el borde de la ventana; un 429 de Groq en ese caso se trata como fallo recuperable.
 

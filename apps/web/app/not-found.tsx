@@ -1,11 +1,15 @@
-import { EmptyState } from '@/components/states';
+import Link from 'next/link';
+import { StateMessage } from '@/components/states';
 
 export default function NotFound() {
   return (
-    <EmptyState
-      title="Page not found"
-      description="The page you are looking for does not exist or you do not have access to it."
-      action={{ href: '/movies', label: 'Browse movies' }}
-    />
+    <StateMessage
+      title="No encontramos esta página"
+      description="Puede que no exista o que no tengas acceso a ella."
+    >
+      <Link href="/movies" className="btn-primary px-[18px] py-2.5">
+        Descubrir películas
+      </Link>
+    </StateMessage>
   );
 }

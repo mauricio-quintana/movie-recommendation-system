@@ -85,6 +85,16 @@ describe('Movies and likes (e2e)', () => {
         genres: ['Drama'],
         runtime: 120,
       });
+      expect(tmdb.calls).toContain('movie:603:es-ES');
+    });
+
+    it('falls back to the original overview when there is no translation', async () => {
+      tmdb.untranslated.add(604);
+
+      const response = await http().get('/api/movies/604').expect(200);
+
+      expect(response.body.overview).toBe('Overview of movie 604');
+      expect(tmdb.calls).toEqual(['movie:604:es-ES', 'movie:604:en-US']);
     });
 
     it('maps unknown movies to 404 and invalid ids to 400', async () => {

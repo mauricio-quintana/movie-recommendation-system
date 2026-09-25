@@ -1,5 +1,5 @@
-import { GridSkeleton } from '@/components/states';
+import { PageSkeleton } from '@/components/states';
 
 export default function Loading() {
-  return <GridSkeleton />;
+  return <PageSkeleton />;
 }

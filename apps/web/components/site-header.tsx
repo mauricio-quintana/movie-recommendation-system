@@ -1,56 +1,36 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { getSession } from '@/lib/api';
-import { SignOutButton } from './sign-out-button';
+import { AccountMenu } from './account-menu';
+import { MobileTabs } from './mobile-tabs';
+import { NavLinks } from './nav-links';
+import { SearchBox } from './search-box';
 
 export async function SiteHeader() {
   const { user } = await getSession();
+  const username = user?.username ?? null;
 
   return (
-    <header className="border-b border-[var(--border)]">
-      <nav
-        aria-label="Main"
-        className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3"
-      >
-        <Link href="/movies" className="text-lg font-semibold">
-          🎬 MovieRecs
-        </Link>
-
-        <div className="flex flex-1 flex-wrap items-center gap-4 text-sm">
-          <Link href="/movies" className="link-nav">
-            Movies
+    <>
+      <header className="sticky top-0 z-20 border-b border-line bg-paper">
+        <div className="mx-auto flex max-w-[1240px] items-center gap-7 px-6 py-3">
+          <Link
+            href="/movies"
+            className="text-base font-bold tracking-[.02em] text-ink no-underline"
+            aria-label="MRS, inicio"
+          >
+            MRS
           </Link>
-          {user && (
-            <>
-              <Link href="/likes" className="link-nav">
-                My likes
-              </Link>
-              <Link href="/recommendations" className="link-nav">
-                Recommendations
-              </Link>
-            </>
-          )}
+          <NavLinks />
+          <Suspense fallback={<div className="ml-auto w-[280px] max-[760px]:hidden" />}>
+            <SearchBox className="ml-auto w-[280px] max-[760px]:hidden" />
+          </Suspense>
+          <div className="max-[760px]:hidden">
+            <AccountMenu username={username} variant="avatar" />
+          </div>
         </div>
-
-        <div className="flex items-center gap-3 text-sm">
-          {user ? (
-            <>
-              <span className="text-muted">
-                Signed in as <strong className="text-[var(--foreground)]">{user.username}</strong>
-              </span>
-              <SignOutButton />
-            </>
-          ) : (
-            <>
-              <Link href="/login" className="link-nav">
-                Sign in
-              </Link>
-              <Link href="/signup" className="button-primary">
-                Create account
-              </Link>
-            </>
-          )}
-        </div>
-      </nav>
-    </header>
+      </header>
+      <MobileTabs username={username} />
+    </>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { StateMessage } from './states';
 
 /**
  * Shared body for error.tsx boundaries. Server error details are never shown.
@@ -8,25 +9,25 @@ import { useEffect } from 'react';
 export function ErrorView({
   error,
   retry,
-  title = 'Something went wrong',
+  title = 'Algo salió mal',
+  description = 'Suele ser un problema temporal. Probá de nuevo en un momento.',
 }: {
   error: Error & { digest?: string };
   retry: () => void;
   title?: string;
+  description?: string;
 }) {
   useEffect(() => {
     console.error(error);
   }, [error]);
 
   return (
-    <div role="alert" className="card flex flex-col items-center gap-3 p-10 text-center">
-      <h2 className="text-lg font-medium">{title}</h2>
-      <p className="text-muted max-w-md text-sm">
-        The service may be temporarily unavailable. Please try again in a moment.
-      </p>
-      <button type="button" onClick={() => retry()} className="button-primary">
-        Try again
-      </button>
+    <div role="alert">
+      <StateMessage title={title} description={description}>
+        <button type="button" onClick={() => retry()} className="btn-primary px-[18px] py-2.5">
+          Reintentar
+        </button>
+      </StateMessage>
     </div>
   );
 }

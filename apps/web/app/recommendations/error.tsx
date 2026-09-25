@@ -6,5 +6,11 @@ export default function RecommendationsError(props: {
   error: Error & { digest?: string };
   retry: () => void;
 }) {
-  return <ErrorView {...props} title="Recommendations could not be loaded" />;
+  return (
+    <ErrorView
+      {...props}
+      title="No pudimos cargar tus recomendaciones"
+      description="Suele ser un problema temporal. Tus likes y tus recomendaciones siguen guardados."
+    />
+  );
 }

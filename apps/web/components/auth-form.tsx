@@ -10,8 +10,25 @@ interface AuthFormProps {
 }
 
 const copy = {
-  'sign-in': { title: 'Sign in', submit: 'Sign in', pending: 'Signing in…' },
-  'sign-up': { title: 'Create account', submit: 'Create account', pending: 'Creating account…' },
+  'sign-in': {
+    title: 'Ingresar',
+    kicker: 'BIENVENIDO DE NUEVO',
+    submit: 'Ingresar',
+    pending: 'Ingresando…',
+  },
+  'sign-up': {
+    title: 'Crear cuenta',
+    kicker: 'EMPEZÁ TU COLECCIÓN',
+    submit: 'Crear cuenta',
+    pending: 'Creando cuenta…',
+  },
+};
+
+const errorMessages: Record<number, string> = {
+  400: 'Revisá el usuario (3–30 letras, números, _ o .) y la contraseña (mínimo 8 caracteres).',
+  401: 'Usuario o contraseña incorrectos.',
+  409: 'Ese nombre de usuario ya está en uso.',
+  429: 'Demasiados intentos. Esperá un minuto y probá de nuevo.',
 };
 
 /**
@@ -38,16 +55,14 @@ export function AuthForm({ mode, next }: AuthFormProps) {
       });
 
       if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { message?: string | string[] };
-        const message = Array.isArray(body.message) ? body.message.join('. ') : body.message;
-        setError(message ?? 'Something went wrong. Please try again.');
+        setError(errorMessages[response.status] ?? 'Algo salió mal. Probá de nuevo.');
         return;
       }
 
       router.replace(next);
       router.refresh();
     } catch {
-      setError('Could not reach the server. Please try again.');
+      setError('No pudimos conectar con el servidor. Probá de nuevo.');
     } finally {
       setPending(false);
     }
@@ -58,13 +73,15 @@ export function AuthForm({ mode, next }: AuthFormProps) {
   return (
     <form
       onSubmit={onSubmit}
-      className="card mx-auto flex w-full max-w-sm flex-col gap-4 p-6"
-      noValidate={false}
+      className="mx-auto mt-6 flex w-full max-w-sm flex-col gap-4 rounded-2xl border border-line bg-white p-7"
     >
-      <h1 className="text-2xl font-semibold">{text.title}</h1>
+      <div className="flex flex-col gap-1.5">
+        <span className="kicker">{text.kicker}</span>
+        <h1 className="page-title">{text.title}</h1>
+      </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Username
+      <label className="flex flex-col gap-1.5 text-sm font-semibold">
+        Usuario
         <input
           name="username"
           autoComplete="username"
@@ -72,13 +89,13 @@ export function AuthForm({ mode, next }: AuthFormProps) {
           minLength={3}
           maxLength={30}
           pattern="[a-zA-Z0-9_.]+"
-          title="Letters, numbers, underscores and dots"
-          className="input"
+          title="Letras, números, guiones bajos y puntos"
+          className="rounded-lg border border-field bg-white px-3 py-2.5 text-[15px] font-normal outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        Password
+      <label className="flex flex-col gap-1.5 text-sm font-semibold">
+        Contraseña
         <input
           name="password"
           type="password"
@@ -86,33 +103,42 @@ export function AuthForm({ mode, next }: AuthFormProps) {
           required
           minLength={8}
           maxLength={128}
-          className="input"
+          className="rounded-lg border border-field bg-white px-3 py-2.5 text-[15px] font-normal outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink"
         />
       </label>
 
       {error && (
-        <p role="alert" className="text-sm text-red-500">
+        <p
+          role="alert"
+          className="m-0 rounded-lg border border-dashed border-dash-strong px-3 py-2 text-sm"
+        >
           {error}
         </p>
       )}
 
-      <button type="submit" disabled={pending} className="button-primary">
+      <button type="submit" disabled={pending} className="btn-primary">
         {pending ? text.pending : text.submit}
       </button>
 
-      <p className="text-muted text-sm">
+      <p className="m-0 text-sm text-muted">
         {mode === 'sign-in' ? (
           <>
-            No account?{' '}
-            <Link href={`/signup?next=${encodeURIComponent(next)}`} className="link">
-              Create one
+            ¿No tenés cuenta?{' '}
+            <Link
+              href={`/signup?next=${encodeURIComponent(next)}`}
+              className="font-semibold text-ink underline"
+            >
+              Creá una
             </Link>
           </>
         ) : (
           <>
-            Already registered?{' '}
-            <Link href={`/login?next=${encodeURIComponent(next)}`} className="link">
-              Sign in
+            ¿Ya tenés cuenta?{' '}
+            <Link
+              href={`/login?next=${encodeURIComponent(next)}`}
+              className="font-semibold text-ink underline"
+            >
+              Ingresá
             </Link>
           </>
         )}

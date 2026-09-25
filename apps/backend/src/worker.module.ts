@@ -5,6 +5,7 @@ import { PrismaModule } from './infrastructure/prisma/prisma.module.js';
 import { RabbitMqService } from './infrastructure/rabbitmq/rabbitmq.service.js';
 import { RedisModule } from './infrastructure/redis/redis.module.js';
 import { OutboxPublisher } from './outbox/outbox.publisher.js';
+import { GroqAvailabilityService } from './recommendations/worker/groq-availability.service.js';
 import { GroqClient } from './recommendations/worker/groq.client.js';
 import { RecommendationConsumer } from './recommendations/worker/recommendation.consumer.js';
 import { RecommendationProcessor } from './recommendations/worker/recommendation.processor.js';
@@ -26,6 +27,7 @@ import { RecommendationProcessor } from './recommendations/worker/recommendation
     RabbitMqService,
     OutboxPublisher,
     GroqClient,
+    GroqAvailabilityService,
     RecommendationProcessor,
     RecommendationConsumer,
   ],

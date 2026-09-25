@@ -1,29 +1,23 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
 import { SiteHeader } from '@/components/site-header';
+import { ToastProvider } from '@/components/toast';
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
-
 export const metadata: Metadata = {
-  title: { default: 'MovieRecs', template: '%s · MovieRecs' },
-  description: 'Explore movies, like your favourites and get personalised recommendations.',
+  title: { default: 'MRS', template: '%s · MRS' },
+  description: 'Explorá películas, guardá tus favoritas y recibí recomendaciones personalizadas.',
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="es" className="h-full">
       <body className="flex min-h-full flex-col">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+        <ToastProvider>
+          <SiteHeader />
+          <main className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col gap-7 px-6 pt-6 pb-[110px]">
+            {children}
+          </main>
+        </ToastProvider>
       </body>
     </html>
   );

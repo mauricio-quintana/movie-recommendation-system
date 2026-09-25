@@ -1,72 +1,110 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #fafafa;
-  --foreground: #171717;
-  --surface: #ffffff;
-  --muted-surface: #ececec;
-  --muted: #5f5f66;
-  --border: #e2e2e5;
-  --accent: #b4235a;
-  --accent-foreground: #ffffff;
-}
+/* Visual language shared by Descubrir, Likes and Recomendaciones (Claude Design). */
+@theme {
+  --color-paper: #f4f4f2;
+  --color-ink: #161616;
+  --color-ink-hover: #333333;
+  --color-muted: #555555;
+  --color-subtle: #6a6a6a;
+  --color-faint: #8a8a8a;
+  --color-line: #dcdcd8;
+  --color-field: #cfcfca;
+  --color-dash: #b9b9b4;
+  --color-dash-strong: #9a9a95;
+  --color-hover: #ececea;
+  --color-page-hover: #e6e6e2;
+  --color-skeleton: #e5e5e1;
+  --color-skeleton-soft: #ecece8;
+  --color-placeholder: #ebebe7;
+  --color-night: #0b0b0b;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b0b0d;
-    --foreground: #ededed;
-    --surface: #151518;
-    --muted-surface: #222227;
-    --muted: #a1a1aa;
-    --border: #2a2a30;
-    --accent: #f0487f;
-    --accent-foreground: #0b0b0d;
-  }
+  --font-sans: 'Helvetica Neue', Helvetica, system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+input::placeholder {
+  color: var(--color-faint);
+}
+
+/* Button base, composable with @apply. */
+@utility btn {
+  @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-5 py-[11px] text-sm font-semibold whitespace-nowrap no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed;
 }
 
 @layer components {
-  .card {
-    @apply rounded-xl border border-[var(--border)] bg-[var(--surface)];
+  .btn-primary {
+    @apply btn border-ink bg-ink text-white hover:bg-ink-hover hover:text-white;
+  }
+  .btn-secondary {
+    @apply btn border-ink bg-white text-ink hover:bg-hover;
+  }
+  .btn-disabled {
+    @apply btn border-[#e2e2de] bg-[#e2e2de] text-faint;
+  }
+  .btn-sm {
+    @apply px-3.5 py-2 text-[13px];
+  }
+  .btn-on-dark {
+    @apply btn border-white bg-white text-ink hover:bg-page-hover;
+  }
+  .btn-ghost-dark {
+    @apply btn border-white/70 bg-transparent text-white hover:bg-white/12;
   }
 
-  .input {
-    @apply rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)];
+  /* Text styles */
+  .kicker {
+    @apply font-mono text-[11px] tracking-[.06em] text-subtle;
+  }
+  .meta {
+    @apply font-mono text-xs text-subtle;
+  }
+  .page-title {
+    @apply m-0 text-[26px] font-bold tracking-[-.01em];
+  }
+  .lede {
+    @apply m-0 text-[15px] leading-[1.45] text-pretty text-muted;
   }
 
-  .button-primary {
-    @apply inline-flex items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+  /* Containers */
+  .dashed-panel {
+    @apply rounded-2xl border border-dashed border-dash;
   }
-
-  .button-ghost {
-    @apply inline-flex items-center justify-center rounded-md border border-[var(--border)] px-3 py-1.5 text-sm transition hover:bg-[var(--muted-surface)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+  .skeleton {
+    @apply bg-skeleton;
   }
-
-  .button-liked {
-    @apply inline-flex items-center justify-center rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--muted-surface)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+  .poster-grid {
+    @apply grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-5 gap-y-7;
   }
-
-  .link {
-    @apply font-medium text-[var(--accent)] underline-offset-4 hover:underline;
+  .field {
+    @apply flex items-center gap-2 rounded-lg border border-field bg-white px-2.5 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-ink;
   }
+}
 
-  .link-nav {
-    @apply rounded text-[var(--muted)] transition hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none;
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
   }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
 
-  .text-muted {
-    color: var(--muted);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

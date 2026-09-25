@@ -101,7 +101,9 @@ describe('Recommendations API (e2e)', () => {
   it('returns 503 and persists nothing when candidates cannot be built', async () => {
     const { cookie, userId } = await signUp(app);
     // Cached popular movies would still be served; simulate a cold cache.
-    await app.get<RedisClient>(REDIS_CLIENT).del('tmdb:v1:popular:page:1');
+    await app
+      .get<RedisClient>(REDIS_CLIENT)
+      .del('tmdb:v2:es-ES:popular:page:1');
     tmdb.available = false;
 
     await http().post('/api/recommendations').set('Cookie', cookie).expect(503);

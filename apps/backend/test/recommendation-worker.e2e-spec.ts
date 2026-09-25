@@ -128,7 +128,11 @@ describe('Recommendation worker (integration)', () => {
     groq.calls = [];
     rabbit.published = [];
     rabbit.fail = false;
-    await redis.del('ratelimit:groq');
+    await redis.del([
+      'ratelimit:groq',
+      'groq:unavailable:until',
+      'groq:unavailable:failures',
+    ]);
   });
 
   afterAll(async () => {
@@ -226,45 +230,90 @@ describe('Recommendation worker (integration)', () => {
     );
   });
 
-  it('retries transient failures with backoff until attempts are exhausted', async () => {
-    const recommendation = await createRecommendation();
+  const groqUnavailable = (retryAfterMs = 30_000) => {
     groq.next = async () => {
       throw new GroqError(
         'GROQ_UNAVAILABLE',
         true,
         'Groq is temporarily unavailable',
-        30_000,
+        retryAfterMs,
       );
     };
+  };
 
-    // Attempts 1 and 2: back to PENDING with a delayed outbox event.
-    for (const attempt of [1, 2]) {
-      const before = Date.now();
-      await expect(processor.process(recommendation.id)).resolves.toBe('ack');
+  it('keeps waiting in the queue while Groq is unavailable, without spending attempts', async () => {
+    const recommendation = await createRecommendation();
+    groqUnavailable();
 
-      expect(await reload(recommendation.id)).toMatchObject({
-        status: RecommendationStatus.PENDING,
-        attempts: attempt,
-      });
+    const before = Date.now();
+    await expect(processor.process(recommendation.id)).resolves.toBe('ack');
 
-      const events = await pendingEvents(recommendation.id);
-      expect(events).toHaveLength(attempt);
-      expect(events.at(-1)!.availableAt.getTime()).toBeGreaterThanOrEqual(
-        before + 30_000,
-      );
-    }
+    expect(groq.calls).toHaveLength(1);
+    expect(await reload(recommendation.id)).toMatchObject({
+      status: RecommendationStatus.PENDING,
+      attempts: 0,
+      failureCode: null,
+    });
+    const [event] = await pendingEvents(recommendation.id);
+    expect(event.availableAt.getTime()).toBeGreaterThanOrEqual(before + 30_000);
+    // The pause is shared through Redis with every worker.
+    expect(
+      Number(await redis.get('groq:unavailable:until')),
+    ).toBeGreaterThanOrEqual(before + 30_000);
+  });
 
-    // Attempt 3 (RECOMMENDATION_MAX_ATTEMPTS default): FAILED and dead-lettered.
+  it('holds every queued recommendation while Groq is paused, without calling it', async () => {
+    const first = await createRecommendation();
+    const second = await createRecommendation();
+    groqUnavailable();
+
+    await processor.process(first.id);
+    await expect(processor.process(second.id)).resolves.toBe('ack');
+
+    // Only the first one reached Groq; the second waits for the shared pause.
+    expect(groq.calls).toHaveLength(1);
+    expect(await reload(second.id)).toMatchObject({
+      status: RecommendationStatus.PENDING,
+      attempts: 0,
+    });
+    const until = Number(await redis.get('groq:unavailable:until'));
+    const [event] = await pendingEvents(second.id);
+    expect(event.availableAt.getTime()).toBeGreaterThanOrEqual(until - 1_000);
+  });
+
+  it('resumes once Groq answers again and clears the shared pause', async () => {
+    const recommendation = await createRecommendation();
+    await redis.set('groq:unavailable:failures', '4');
+    groq.next = async () => '{"tmdbId": 5002, "reason": "Back online."}';
+
+    await expect(processor.process(recommendation.id)).resolves.toBe('ack');
+
+    expect((await reload(recommendation.id)).status).toBe(
+      RecommendationStatus.COMPLETED,
+    );
+    expect(
+      await redis.exists([
+        'groq:unavailable:until',
+        'groq:unavailable:failures',
+      ]),
+    ).toBe(0);
+  });
+
+  it('only gives up after the maximum wait since the request', async () => {
+    // RECOMMENDATION_MAX_WAIT_MINUTES defaults to 30.
+    const recommendation = await createRecommendation({
+      createdAt: new Date(Date.now() - 31 * 60_000),
+    });
+    groqUnavailable();
+
     await expect(processor.process(recommendation.id)).resolves.toBe(
       'dead-letter',
     );
     expect(await reload(recommendation.id)).toMatchObject({
       status: RecommendationStatus.FAILED,
-      attempts: 3,
-      failureCode: 'GROQ_UNAVAILABLE',
-      failureMessage: 'Groq is temporarily unavailable. Retries exhausted.',
+      failureCode: 'PROVIDER_UNAVAILABLE',
     });
-    expect(groq.calls).toHaveLength(3);
+    expect(await pendingEvents(recommendation.id)).toHaveLength(0);
   });
 
   it('postpones without consuming an attempt when the global rate limit is reached', async () => {
@@ -346,7 +395,7 @@ describe('Recommendation worker (integration)', () => {
       await degraded.close();
     });
 
-    it('fails closed: Groq is not called and the attempt is retried later', async () => {
+    it('fails closed: Groq is not called and the request stays queued', async () => {
       const recommendation = await createRecommendation();
 
       await expect(
@@ -356,7 +405,7 @@ describe('Recommendation worker (integration)', () => {
       expect(groq.calls).toHaveLength(0);
       expect(await reload(recommendation.id)).toMatchObject({
         status: RecommendationStatus.PENDING,
-        attempts: 1,
+        attempts: 0,
       });
       expect(await pendingEvents(recommendation.id)).toHaveLength(1);
     });

@@ -1,50 +1,30 @@
 'use client';
 
-import { useOptimistic, useState, useTransition } from 'react';
-import { setLike } from '@/lib/actions';
+import { useLike } from '@/lib/use-like';
 
 interface LikeButtonProps {
   tmdbId: number;
   title: string;
   liked: boolean;
+  /** 'dark' sits on the recommendation hero. */
+  tone?: 'light' | 'dark';
 }
 
-export function LikeButton({ tmdbId, title, liked }: LikeButtonProps) {
-  const [optimisticLiked, setOptimisticLiked] = useOptimistic(liked);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  function toggle() {
-    const next = !optimisticLiked;
-    setError(null);
-
-    startTransition(async () => {
-      setOptimisticLiked(next);
-      const result = await setLike(tmdbId, next);
-
-      if (!result.ok) {
-        setError(result.error);
-      }
-    });
-  }
+/**
+ * "♡ Me gusta" / "♥ En tus likes" text button used next to "Ver detalle".
+ */
+export function LikeButton({ tmdbId, title, liked, tone = 'light' }: LikeButtonProps) {
+  const like = useLike(tmdbId, title, liked);
 
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={pending}
-        aria-pressed={optimisticLiked}
-        aria-label={`${optimisticLiked ? 'Unlike' : 'Like'} ${title}`}
-        className={optimisticLiked ? 'button-liked' : 'button-ghost'}
-      >
-        {optimisticLiked ? '♥ Liked' : '♡ Like'}
-      </button>
-      {error && (
-        <p role="alert" className="text-xs text-red-500">
-          {error}
-        </p>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={like.toggle}
+      disabled={like.pending}
+      aria-pressed={like.liked}
+      className={`${tone === 'dark' ? 'btn-ghost-dark' : 'btn-secondary'} px-[18px]`}
+    >
+      {like.liked ? '♥ En tus likes' : '♡ Me gusta'}
+    </button>
   );
 }

@@ -1,46 +1,80 @@
-import Link from 'next/link';
+import type { ReactNode } from 'react';
 
-export function EmptyState({
+/**
+ * Centered message with the design's dashed circle: empty and error states.
+ */
+export function StateMessage({
   title,
   description,
-  action,
+  icon,
+  kicker,
+  children,
+  bordered = false,
 }: {
   title: string;
   description?: string;
-  action?: { href: string; label: string };
+  icon?: string;
+  kicker?: ReactNode;
+  children?: ReactNode;
+  bordered?: boolean;
 }) {
   return (
-    <div className="card flex flex-col items-center gap-3 p-10 text-center">
-      <h2 className="text-lg font-medium">{title}</h2>
-      {description && <p className="text-muted max-w-md text-sm">{description}</p>}
-      {action && (
-        <Link href={action.href} className="button-primary">
-          {action.label}
-        </Link>
+    <section
+      className={`flex flex-col items-center justify-center gap-2.5 px-5 text-center ${
+        bordered ? 'dashed-panel min-h-[360px] py-12' : 'py-16'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className="flex size-14 items-center justify-center rounded-full border border-dashed border-dash-strong text-lg"
+      >
+        {icon}
+      </span>
+      {kicker && <span className="kicker">{kicker}</span>}
+      <h2 className="m-0 text-xl font-bold">{title}</h2>
+      {description && (
+        <p className="m-0 max-w-[380px] text-sm leading-[1.45] text-muted">{description}</p>
       )}
+      {children && <div className="mt-1.5 flex flex-wrap justify-center gap-2.5">{children}</div>}
+    </section>
+  );
+}
+
+function PosterSkeleton() {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="skeleton aspect-[2/3] rounded-[15px]" />
+      <div className="skeleton h-2.5 w-4/5 rounded" />
+      <div className="h-2 w-[45%] rounded bg-skeleton-soft" />
     </div>
   );
 }
 
 export function GridSkeleton({ count = 10 }: { count?: number }) {
   return (
-    <div
-      role="status"
-      aria-label="Loading"
-      className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5"
-    >
+    <div className="poster-grid">
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="card aspect-[2/3] animate-pulse bg-[var(--muted-surface)]" />
+        <PosterSkeleton key={index} />
       ))}
     </div>
   );
 }
 
-export function PageSkeleton() {
+/** Loading state: optional 440px hero followed by a poster grid. */
+export function PageSkeleton({
+  hero = true,
+  count = 10,
+  children,
+}: {
+  hero?: boolean;
+  count?: number;
+  children?: ReactNode;
+}) {
   return (
-    <div role="status" aria-label="Loading" className="flex flex-col gap-4">
-      <div className="h-8 w-1/3 animate-pulse rounded bg-[var(--muted-surface)]" />
-      <div className="h-40 animate-pulse rounded bg-[var(--muted-surface)]" />
+    <div role="status" aria-label="Cargando" className="flex flex-col gap-7">
+      {children}
+      {hero && <div className="skeleton h-[440px] rounded-2xl max-[520px]:h-[300px]" />}
+      <GridSkeleton count={count} />
     </div>
   );
 }

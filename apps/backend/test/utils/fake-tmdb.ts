@@ -32,7 +32,10 @@ function page(results: unknown[]): TmdbPage {
  * In-memory stand-in for TmdbClient. Movie ids >= 900000 do not exist.
  */
 export class FakeTmdbClient {
+  language = 'es-ES';
   available = true;
+  /** Movies without a translated overview in the configured language. */
+  untranslated = new Set<number>();
   calls: string[] = [];
   recommendationsById = new Map<number, number[]>();
   popularIds = Array.from({ length: 20 }, (_, index) => 1000 + index);
@@ -69,11 +72,15 @@ export class FakeTmdbClient {
     );
   }
 
-  async movie(tmdbId: number) {
-    this.guard(`movie:${tmdbId}`);
+  async movie(tmdbId: number, language = this.language) {
+    this.guard(`movie:${tmdbId}:${language}`);
 
     if (tmdbId >= 900000) {
       throw new TmdbNotFoundError();
+    }
+
+    if (this.untranslated.has(tmdbId) && language === this.language) {
+      return tmdbMovie(tmdbId, { overview: '' });
     }
 
     return tmdbMovie(tmdbId);

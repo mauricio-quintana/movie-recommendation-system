@@ -24,7 +24,10 @@ import {
   TmdbUnavailableError,
 } from './tmdb.client.js';
 
-const CACHE_PREFIX = 'tmdb:v1';
+// Responses are cached per language: v2 added it to the key.
+const CACHE_VERSION = 'tmdb:v2';
+// TMDB leaves the overview empty when it has no translation.
+const OVERVIEW_FALLBACK_LANGUAGE = 'en-US';
 
 const TTL_SECONDS = {
   list: 10 * 60,
@@ -46,19 +49,23 @@ export class MoviesService {
     private readonly prisma: PrismaClient,
   ) {}
 
+  private get cachePrefix(): string {
+    return `${CACHE_VERSION}:${this.tmdb.language}`;
+  }
+
   list(page: number, search?: string): Promise<MoviePage> {
     const query = search?.trim();
 
     if (query) {
       return this.cached(
-        `${CACHE_PREFIX}:search:${encodeURIComponent(query.toLowerCase())}:page:${page}`,
+        `${this.cachePrefix}:search:${encodeURIComponent(query.toLowerCase())}:page:${page}`,
         TTL_SECONDS.list,
         async () => this.requirePage(await this.tmdb.search(query, page)),
       );
     }
 
     return this.cached(
-      `${CACHE_PREFIX}:popular:page:${page}`,
+      `${this.cachePrefix}:popular:page:${page}`,
       TTL_SECONDS.list,
       async () => this.requirePage(await this.tmdb.popular(page)),
     );
@@ -66,13 +73,17 @@ export class MoviesService {
 
   getMovie(tmdbId: number): Promise<MovieDetail> {
     return this.cached(
-      `${CACHE_PREFIX}:movie:${tmdbId}`,
+      `${this.cachePrefix}:movie:${tmdbId}`,
       TTL_SECONDS.detail,
       async () => {
         const movie = toMovieDetail(await this.tmdb.movie(tmdbId));
 
         if (!movie || movie.tmdbId !== tmdbId) {
           throw new TmdbUnavailableError('invalid movie payload');
+        }
+
+        if (!movie.overview) {
+          movie.overview = await this.fallbackOverview(tmdbId);
         }
 
         return movie;
@@ -82,7 +93,7 @@ export class MoviesService {
 
   async getRecommendationsFor(tmdbId: number): Promise<MovieSummary[]> {
     const page = await this.cached(
-      `${CACHE_PREFIX}:movie:${tmdbId}:recommendations`,
+      `${this.cachePrefix}:movie:${tmdbId}:recommendations`,
       TTL_SECONDS.recommendations,
       async () => this.requirePage(await this.tmdb.recommendations(tmdbId)),
     );
@@ -126,6 +137,21 @@ export class MoviesService {
     });
 
     return new Map(rows.map((row) => [row.tmdbId, row]));
+  }
+
+  private async fallbackOverview(tmdbId: number): Promise<string | null> {
+    if (this.tmdb.language === OVERVIEW_FALLBACK_LANGUAGE) {
+      return null;
+    }
+
+    try {
+      return (
+        toMovieDetail(await this.tmdb.movie(tmdbId, OVERVIEW_FALLBACK_LANGUAGE))
+          ?.overview ?? null
+      );
+    } catch {
+      return null;
+    }
   }
 
   private requirePage(value: unknown): MoviePage {

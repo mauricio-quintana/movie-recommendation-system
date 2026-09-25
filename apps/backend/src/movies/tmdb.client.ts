@@ -48,10 +48,13 @@ export class TmdbClient {
   private readonly logger = new Logger(TmdbClient.name);
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  /** Language for titles, overviews and genres (TMDB falls back when untranslated). */
+  readonly language: string;
 
   constructor(config: ConfigService) {
     this.apiKey = config.getOrThrow<string>('TMDB_API_KEY');
     this.baseUrl = config.getOrThrow<string>('TMDB_BASE_URL');
+    this.language = config.get<string>('TMDB_LANGUAGE', 'es-ES');
   }
 
   popular(page: number): Promise<TmdbPage> {
@@ -70,8 +73,8 @@ export class TmdbClient {
     return this.get(`/movie/${tmdbId}/recommendations`, { page: '1' });
   }
 
-  movie(tmdbId: number): Promise<unknown> {
-    return this.get(`/movie/${tmdbId}`, {});
+  movie(tmdbId: number, language = this.language): Promise<unknown> {
+    return this.get(`/movie/${tmdbId}`, { language });
   }
 
   private async get<T>(
@@ -80,6 +83,8 @@ export class TmdbClient {
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
     const headers: Record<string, string> = { Accept: 'application/json' };
+
+    url.searchParams.set('language', this.language);
 
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);

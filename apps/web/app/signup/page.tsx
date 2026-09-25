@@ -4,7 +4,7 @@ import { AuthForm } from '@/components/auth-form';
 import { getSession } from '@/lib/api';
 import { safeNextPath } from '@/lib/format';
 
-export const metadata: Metadata = { title: 'Create account' };
+export const metadata: Metadata = { title: 'Crear cuenta' };
 
 export default async function SignupPage({ searchParams }: PageProps<'/signup'>) {
   const next = safeNextPath((await searchParams).next);

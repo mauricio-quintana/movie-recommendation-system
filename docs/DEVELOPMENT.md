@@ -54,12 +54,24 @@ Opcionales (con valores por defecto, ver `.env.example`):
 
 ```text
 TMDB_BASE_URL
+TMDB_LANGUAGE            (es-ES: títulos, sinopsis y géneros)
 GROQ_BASE_URL
 GROQ_MODEL
 GROQ_RATE_LIMIT_PER_MINUTE
 RECOMMENDATION_MAX_ATTEMPTS
+RECOMMENDATION_MAX_WAIT_MINUTES  (30: plazo antes de cancelar si Groq no está disponible)
 AUTH_RATE_LIMIT_PER_MINUTE
 ```
+
+Frontend (se incorporan en el build de `web`, opcionales):
+
+```text
+NEXT_PUBLIC_RECOMMENDATION_POLL_INTERVAL_MS       2000   consulta del estado mientras está en curso
+NEXT_PUBLIC_RECOMMENDATION_POLL_SLOW_INTERVAL_MS  5000   intervalo después del primer minuto
+NEXT_PUBLIC_RECOMMENDATION_MAX_WAIT_MS            300000 pausa del polling automático
+```
+
+El worker puede esperar hasta 30 min (`RECOMMENDATION_MAX_WAIT_MINUTES`) si Groq no está disponible o está saturado; los casos normales, incluso con picos de carga, se resuelven en segundos o pocos minutos. A los 5 min el frontend deja de consultar automáticamente y ofrece «Volver a consultar», con el mismo mensaje neutral de «en proceso». Nunca marca la recomendación como fallida: eso solo lo decide el backend.
 
 ## 4. Desarrollo local
 

@@ -7,6 +7,7 @@ import {
 } from '../../generated/prisma/client.js';
 import { RateLimiterService } from '../../infrastructure/redis/rate-limiter.service.js';
 import { generateRecommendationEvent } from '../recommendation.events.js';
+import { GroqAvailabilityService } from './groq-availability.service.js';
 import { GroqClient, GroqError } from './groq.client.js';
 import {
   InvalidModelOutputError,
@@ -22,6 +23,8 @@ export type ProcessingOutcome = 'ack' | 'dead-letter';
 export const PROCESSING_LEASE_MS = 2 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const LIKED_MOVIES_IN_PROMPT = 20;
+// Spreads queued recommendations resuming at the same time.
+const RESUME_JITTER_MS = 2_000;
 
 class RateLimitedError extends Error {
   constructor(readonly retryAfterMs: number) {
@@ -50,14 +53,18 @@ export class RecommendationProcessor {
   private readonly logger = new Logger(RecommendationProcessor.name);
   private readonly maxAttempts: number;
   private readonly groqLimitPerMinute: number;
+  private readonly maxWaitMs: number;
 
   constructor(
     private readonly prisma: PrismaClient,
     private readonly groq: GroqClient,
     private readonly rateLimiter: RateLimiterService,
+    private readonly availability: GroqAvailabilityService,
     config: ConfigService,
   ) {
     this.maxAttempts = config.get<number>('RECOMMENDATION_MAX_ATTEMPTS', 3);
+    this.maxWaitMs =
+      config.get<number>('RECOMMENDATION_MAX_WAIT_MINUTES', 30) * 60_000;
     this.groqLimitPerMinute = config.get<number>(
       'GROQ_RATE_LIMIT_PER_MINUTE',
       30,
@@ -116,17 +123,43 @@ export class RecommendationProcessor {
       );
     }
 
+    // Groq paused for everyone after a transient failure: wait without calling it.
+    const pausedUntil = await this.availability.pausedUntil();
+
+    if (pausedUntil !== null) {
+      return this.waitForProvider(
+        recommendation,
+        attempt,
+        pausedUntil - Date.now(),
+      );
+    }
+
     try {
       await this.acquireGroqPermit();
       await this.generate(recommendation, attempt);
       return 'ack';
     } catch (error) {
       if (error instanceof RateLimitedError) {
-        await this.postpone(recommendation.id, attempt, error.retryAfterMs);
-        return 'ack';
+        return this.waitForProvider(
+          recommendation,
+          attempt,
+          error.retryAfterMs,
+        );
       }
 
-      return this.fail(recommendation.id, attempt, this.classify(error));
+      const failure = this.classify(error);
+
+      if (!failure.retryable) {
+        return this.fail(recommendation.id, attempt, failure);
+      }
+
+      // Provider (or limiter) unavailable: the request waits in the queue.
+      const until =
+        failure.code === 'RATE_LIMITER_UNAVAILABLE'
+          ? Date.now() + retryDelayMs(1)
+          : await this.availability.reportUnavailable(failure.retryAfterMs);
+
+      return this.waitForProvider(recommendation, attempt, until - Date.now());
     }
   }
 
@@ -207,6 +240,7 @@ export class RecommendationProcessor {
         candidates,
       ),
     );
+    await this.availability.reportAvailable();
 
     const selection = parseRecommendationOutput(
       content,
@@ -245,14 +279,33 @@ export class RecommendationProcessor {
   }
 
   /**
-   * Throttled by our own limiter: not a failed attempt, so the attempt is given back.
+   * Keeps the recommendation queued (PENDING) until the provider can take it. It is
+   * not a failed attempt, so the attempt is given back. The only way out besides
+   * success is the overall deadline (RECOMMENDATION_MAX_WAIT_MINUTES since the request).
    */
-  private async postpone(
-    id: string,
+  private async waitForProvider(
+    recommendation: Recommendation,
     attempt: number,
     delayMs: number,
-  ): Promise<void> {
-    await this.reschedule(id, attempt, attempt - 1, delayMs);
+  ): Promise<ProcessingOutcome> {
+    const delay =
+      Math.max(delayMs, 0) + Math.floor(Math.random() * RESUME_JITTER_MS);
+    const deadline = recommendation.createdAt.getTime() + this.maxWaitMs;
+
+    if (Date.now() + delay > deadline) {
+      return this.fail(
+        recommendation.id,
+        attempt,
+        new ProcessingFailure(
+          'PROVIDER_UNAVAILABLE',
+          false,
+          'The recommendation could not be generated within the maximum wait',
+        ),
+      );
+    }
+
+    await this.reschedule(recommendation.id, attempt, attempt - 1, delay);
+    return 'ack';
   }
 
   private async fail(
@@ -260,28 +313,14 @@ export class RecommendationProcessor {
     attempt: number,
     failure: ProcessingFailure,
   ): Promise<ProcessingOutcome> {
-    if (failure.retryable && attempt < this.maxAttempts) {
-      const delayMs = retryDelayMs(attempt, failure.retryAfterMs);
-      this.logger.warn(
-        `Recommendation ${id} attempt ${attempt} failed (${failure.code}), retrying in ${delayMs}ms`,
-      );
-      await this.reschedule(id, attempt, attempt, delayMs);
-      return 'ack';
-    }
-
-    const exhausted = failure.retryable;
-    this.logger.error(
-      `Recommendation ${id} failed (${failure.code})${exhausted ? ' after exhausting retries' : ''}`,
-    );
+    this.logger.error(`Recommendation ${id} failed (${failure.code})`);
 
     await this.prisma.recommendation.updateMany({
       where: { id, status: RecommendationStatus.PROCESSING, attempts: attempt },
       data: {
         status: RecommendationStatus.FAILED,
         failureCode: failure.code,
-        failureMessage: exhausted
-          ? `${failure.message}. Retries exhausted.`
-          : failure.message,
+        failureMessage: failure.message,
         completedAt: new Date(),
       },
     });

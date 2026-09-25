@@ -1,16 +1,21 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { MovieCard, MovieGrid } from '@/components/movie-card';
-import { EmptyState } from '@/components/states';
+import { Suspense } from 'react';
+import { FeaturedGallery, type FeaturedMovie } from '@/components/featured-gallery';
+import { LikeHeart } from '@/components/like-heart';
+import { Pagination } from '@/components/pagination';
+import { PosterCard, PosterGrid } from '@/components/poster-card';
+import { RequestRecommendationButton } from '@/components/request-recommendation-button';
+import { SearchBox } from '@/components/search-box';
+import { StateMessage } from '@/components/states';
 import { apiFetch } from '@/lib/api';
+import { firstParam, movieMeta, tmdbImage } from '@/lib/format';
 import { getLikedIds } from '@/lib/likes';
 import type { MoviePage } from '@/lib/types';
 
-export const metadata: Metadata = { title: 'Movies' };
+export const metadata: Metadata = { title: 'Descubrir' };
 
-function first(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
+const FEATURED_COUNT = 5;
 
 function toPage(value: string | undefined): number {
   const page = Number(value);
@@ -27,10 +32,10 @@ function pageHref(page: number, search: string) {
   return `/movies?${params.toString()}`;
 }
 
-export default async function MoviesPage({ searchParams }: PageProps<'/movies'>) {
+export default async function DiscoverPage({ searchParams }: PageProps<'/movies'>) {
   const params = await searchParams;
-  const search = first(params.search)?.trim().slice(0, 100) ?? '';
-  const page = toPage(first(params.page));
+  const search = firstParam(params.search)?.trim().slice(0, 100) ?? '';
+  const page = toPage(firstParam(params.page));
 
   const query = new URLSearchParams({ page: String(page) });
   if (search) {
@@ -42,77 +47,102 @@ export default async function MoviesPage({ searchParams }: PageProps<'/movies'>)
     getLikedIds(),
   ]);
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {search ? `Results for “${search}”` : 'Popular movies'}
-          </h1>
-          <p className="text-muted text-sm">
-            {likedIds
-              ? 'Like movies to shape your recommendations.'
-              : 'Sign in to like movies and get recommendations.'}
-          </p>
-        </div>
+  const liked = (tmdbId: number) => likedIds?.has(tmdbId) ?? false;
+  const isFirstPage = page === 1 && !search;
+  const featured = isFirstPage ? movies.results.slice(0, FEATURED_COUNT) : [];
+  const grid = isFirstPage ? movies.results.slice(FEATURED_COUNT) : movies.results;
+  const likeCount = likedIds?.size ?? 0;
+  const isEmpty = movies.results.length === 0;
 
-        <form action="/movies" role="search" className="flex gap-2">
-          <label htmlFor="search" className="sr-only">
-            Search movies
-          </label>
-          <input
-            id="search"
-            name="search"
-            type="search"
-            defaultValue={search}
-            placeholder="Search by title…"
-            maxLength={100}
-            className="input w-56"
-          />
-          <button type="submit" className="button-primary">
-            Search
-          </button>
-        </form>
+  const featuredMovies: FeaturedMovie[] = featured.map((movie) => ({
+    tmdbId: movie.tmdbId,
+    title: movie.title,
+    backdrop: tmdbImage(movie.backdropPath ?? movie.posterPath, 'w1280'),
+    meta: movieMeta(movie),
+    liked: liked(movie.tmdbId),
+  }));
+
+  return (
+    <>
+      <Suspense>
+        <SearchBox large className="hidden max-[760px]:flex" />
+      </Suspense>
+
+      <div className="flex flex-wrap items-baseline gap-3.5">
+        <h1 className="page-title">{search ? `Resultados para “${search}”` : 'Descubrir'}</h1>
+        <span className="meta">
+          {search
+            ? `${movies.totalResults} ${movies.totalResults === 1 ? 'película' : 'películas'}`
+            : `Populares en TMDB · página ${page} de ${movies.totalPages}`}
+        </span>
+        {search && (
+          <Link href="/movies" className="text-[13px] text-ink underline">
+            ✕ Limpiar búsqueda
+          </Link>
+        )}
       </div>
 
-      {movies.results.length === 0 ? (
-        <EmptyState
-          title="No movies found"
-          description={search ? 'Try a different title.' : 'The catalog returned no movies.'}
-          action={search ? { href: '/movies', label: 'Back to popular movies' } : undefined}
-        />
+      {isEmpty ? (
+        <StateMessage
+          title={`Sin resultados para “${search}”`}
+          description="Revisá la ortografía o probá con otro título."
+        >
+          <Link href="/movies" className="btn-secondary px-4 py-[9px]">
+            Limpiar búsqueda
+          </Link>
+        </StateMessage>
       ) : (
-        <MovieGrid>
-          {movies.results.map((movie, index) => (
-            <MovieCard
-              key={movie.tmdbId}
-              movie={movie}
-              liked={likedIds ? likedIds.has(movie.tmdbId) : undefined}
-              priority={index < 5}
-            />
-          ))}
-        </MovieGrid>
-      )}
+        <>
+          {featuredMovies.length > 0 && <FeaturedGallery movies={featuredMovies} />}
 
-      {movies.totalPages > 1 && (
-        <nav aria-label="Pagination" className="flex items-center justify-center gap-4 text-sm">
-          {page > 1 ? (
-            <Link href={pageHref(page - 1, search)} className="button-ghost">
-              ← Previous
-            </Link>
-          ) : (
-            <span />
+          {page === 1 && likeCount > 0 && (
+            <div className="flex flex-wrap items-center gap-4 rounded-[10px] border border-dashed border-dash px-4 py-3">
+              <span className="text-sm">
+                Tenés {likeCount} {likeCount === 1 ? 'like' : 'likes'}. ¿Te recomendamos una
+                película?
+              </span>
+              <div className="ml-auto">
+                <RequestRecommendationButton className="btn-secondary btn-sm" />
+              </div>
+            </div>
           )}
-          <span className="text-muted">
-            Page {page} of {movies.totalPages}
-          </span>
-          {page < movies.totalPages && (
-            <Link href={pageHref(page + 1, search)} className="button-ghost">
-              Next →
-            </Link>
+
+          <section className="flex flex-col gap-4" aria-label="Películas">
+            {!search && (
+              <h2 className="m-0 text-lg font-bold">
+                {isFirstPage ? 'Más populares' : 'Populares'}
+              </h2>
+            )}
+            <PosterGrid>
+              {grid.map((movie, index) => (
+                <PosterCard
+                  key={movie.tmdbId}
+                  title={movie.title}
+                  meta={movieMeta(movie)}
+                  poster={tmdbImage(movie.posterPath)}
+                  href={`/movies/${movie.tmdbId}`}
+                  priority={index < 5}
+                  overlay={
+                    <LikeHeart
+                      tmdbId={movie.tmdbId}
+                      title={movie.title}
+                      liked={liked(movie.tmdbId)}
+                    />
+                  }
+                />
+              ))}
+            </PosterGrid>
+          </section>
+
+          {movies.totalPages > 1 && (
+            <Pagination
+              page={page}
+              totalPages={movies.totalPages}
+              href={(target) => pageHref(target, search)}
+            />
           )}
-        </nav>
+        </>
       )}
-    </div>
+    </>
   );
 }
