@@ -22,5 +22,20 @@ coverage
 
 apps/backend/src/generated/prisma
 
+# Local build state: changes on every host build and must not reach the image.
+**/*.tsbuildinfo
+
+# Not used by any image: excluding them keeps unrelated edits from invalidating the cache.
+.agents
+.claude
+.husky
+docs
+**/*.md
+**/Dockerfile
+.dockerignore
+docker-compose.yml
+apps/backend/test
+**/*.spec.ts
+
 .DS_Store
 *.log

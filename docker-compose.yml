@@ -1,3 +1,14 @@
+x-backend-build: &backend-build
+  context: .
+  dockerfile: apps/backend/Dockerfile
+
+x-backend-environment: &backend-environment
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/movie_recommendation
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+  FRONTEND_URL: http://localhost:3000
+  BETTER_AUTH_URL: http://localhost:3001
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -44,29 +55,39 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot: applies versioned Prisma migrations before the API and worker start.
+  migrate:
+    build: *backend-build
+    image: movie-recommendation-system-backend
+    container_name: movie-recommendation-migrate
+    working_dir: /app/apps/backend
+    command: ['node_modules/.bin/prisma', 'migrate', 'deploy', '--config', 'prisma7.config.ts']
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/movie_recommendation
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
   api:
-    build:
-      context: .
-      dockerfile: apps/backend/Dockerfile
+    build: *backend-build
+    image: movie-recommendation-system-backend
     container_name: movie-recommendation-api
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/movie_recommendation
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      <<: *backend-environment
       PORT: 3001
-      FRONTEND_URL: http://localhost:3000
-      BETTER_AUTH_URL: http://localhost:3001
     ports:
       - '3001:3001'
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    restart: unless-stopped
     healthcheck:
       test:
         [
@@ -79,21 +100,55 @@ services:
       timeout: 5s
       retries: 10
 
+  # Same image as the API with a different entrypoint: outbox relay + RabbitMQ consumer.
+  worker:
+    build: *backend-build
+    image: movie-recommendation-system-backend
+    container_name: movie-recommendation-worker
+    command: ['node', 'apps/backend/dist/worker.js']
+    env_file:
+      - .env
+    environment:
+      <<: *backend-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        BACKEND_URL: http://api:3001
     container_name: movie-recommendation-web
     environment:
       NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_API_URL: http://localhost:3001
       BACKEND_URL: http://api:3001
     ports:
       - '3000:3000'
     depends_on:
       api:
         condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:

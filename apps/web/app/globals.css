@@ -1,8 +1,14 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #ffffff;
+  --background: #fafafa;
   --foreground: #171717;
+  --surface: #ffffff;
+  --muted-surface: #ececec;
+  --muted: #5f5f66;
+  --border: #e2e2e5;
+  --accent: #b4235a;
+  --accent-foreground: #ffffff;
 }
 
 @theme inline {
@@ -14,13 +20,53 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #0b0b0d;
     --foreground: #ededed;
+    --surface: #151518;
+    --muted-surface: #222227;
+    --muted: #a1a1aa;
+    --border: #2a2a30;
+    --accent: #f0487f;
+    --accent-foreground: #0b0b0d;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-[var(--border)] bg-[var(--surface)];
+  }
+
+  .input {
+    @apply rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)];
+  }
+
+  .button-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .button-ghost {
+    @apply inline-flex items-center justify-center rounded-md border border-[var(--border)] px-3 py-1.5 text-sm transition hover:bg-[var(--muted-surface)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .button-liked {
+    @apply inline-flex items-center justify-center rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--muted-surface)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .link {
+    @apply font-medium text-[var(--accent)] underline-offset-4 hover:underline;
+  }
+
+  .link-nav {
+    @apply rounded text-[var(--muted)] transition hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none;
+  }
+
+  .text-muted {
+    color: var(--muted);
+  }
 }

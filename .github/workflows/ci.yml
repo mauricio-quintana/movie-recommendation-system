@@ -27,6 +27,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The generated client is not committed; typecheck and build need it.
+      - name: Generate Prisma Client
+        run: pnpm --filter backend exec prisma generate --config prisma7.config.ts
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/movie_recommendation
+
+      - name: Validate Prisma schema
+        run: pnpm --filter backend exec prisma validate --config prisma7.config.ts
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/movie_recommendation
+
       - name: Lint
         run: pnpm lint
 
@@ -41,3 +52,61 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: movie_recommendation
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d movie_recommendation"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    # TMDB, Groq and RabbitMQ are replaced by test doubles in the e2e suites.
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/movie_recommendation
+      REDIS_URL: redis://localhost:6379
+      RABBITMQ_URL: amqp://guest:guest@localhost:5672
+      FRONTEND_URL: http://localhost:3000
+      BETTER_AUTH_URL: http://localhost:3001
+      BETTER_AUTH_SECRET: ci-only-secret-with-at-least-32-characters
+      TMDB_API_KEY: ci-test-key
+      GROQ_API_KEY: ci-test-key
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.27.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter backend exec prisma generate --config prisma7.config.ts
+
+      - name: E2E tests
+        run: pnpm test:e2e

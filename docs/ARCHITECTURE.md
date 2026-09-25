@@ -156,20 +156,32 @@ Recommendation API
              +--> FAILED
 ```
 
+### Candidatos
+
+Se calculan en la API, antes de encolar: recomendaciones de TMDB para los 5 likes más recientes, ordenadas por cuántos likes apuntan a cada película, sin incluir películas ya likeadas (máx. 20). Si el usuario no tiene likes se usan las populares.
+
+Los snapshots de los candidatos se guardan en la misma transacción que `Recommendation` y `OutboxEvent`. Así el worker arma el prompt solo con PostgreSQL y no llama a TMDB.
+
 ## 8. Recommendation lifecycle
 
 ```text
 PENDING
    |
    v
-PROCESSING
+PROCESSING ----> PENDING  (fallo recuperable o rate limit: reintento programado)
    |
    +----> COMPLETED
    |
    +----> FAILED
 ```
 
-Las transiciones deben ser seguras frente a redelivery y duplicados.
+Las transiciones deben ser seguras frente a redelivery y duplicados:
+
+- **Claim**: `PENDING → PROCESSING` es un `UPDATE` condicionado a `status`, `attempts` y `updatedAt` leídos (concurrencia optimista). Si otro proceso ganó, el mensaje se descarta con ACK.
+- **Fencing**: las escrituras finales (`COMPLETED`, `FAILED`, vuelta a `PENDING`) se condicionan a `status = PROCESSING` y al número de intento, así un worker lento que perdió su turno no pisa el resultado.
+- **Lease**: un `PROCESSING` sin cambios durante 2 minutos se considera abandonado (worker caído) y puede volver a reclamarse. Si llega un duplicado dentro del lease, se programa una revisión para cuando venza.
+- `COMPLETED`/`FAILED` son finales: una nueva entrega solo hace ACK.
+- Si se reclama más veces que `RECOMMENDATION_MAX_ATTEMPTS`, se marca `FAILED` (`ATTEMPTS_EXHAUSTED`).
 
 ## 9. Outbox
 
@@ -194,6 +206,8 @@ mark published
 ```
 
 El publisher debe tolerar reinicios y publicaciones repetidas.
+
+Implementación: el relay corre en el proceso worker y consulta el outbox cada segundo. Reclama lotes con `FOR UPDATE SKIP LOCKED` y un lease de 30 s sobre `availableAt`, así pueden correr varios workers a la vez. Si el proceso cae entre publicar y marcar como publicado, el evento se publica de nuevo; el consumer es idempotente. Si el broker no confirma, se guarda `lastError` y se reintenta con backoff.
 
 ## 10. RabbitMQ
 
@@ -231,6 +245,15 @@ DLQ:
 - retries agotados
 - mensajes no procesables
 
+Decisiones de implementación:
+
+- Las colas son **quorum queues** durables (el tipo replicado que recomienda RabbitMQ). `recommendation.commands` hace dead-lettering hacia `recommendation.commands.dlq` por el exchange por defecto y tiene `x-delivery-limit` = 10 como red de seguridad para mensajes que tumban al worker.
+- **Backoff sin colas extra**: ante un fallo recuperable, el worker devuelve la recomendación a `PENDING` y crea, en la misma transacción, un `OutboxEvent` con `availableAt` en el futuro (exponencial con jitter, respetando `Retry-After`). Luego hace ACK. El reintento es durable y no añade topología.
+- Máximo de intentos: `RECOMMENDATION_MAX_ATTEMPTS` (3 por defecto). Al agotarse: `FAILED` + DLQ.
+- Fallos no recuperables (salida inválida del modelo, credenciales, request rechazado): `FAILED` inmediato + DLQ.
+- Errores de infraestructura inesperados (p. ej. PostgreSQL caído): `nack` con requeue tras una pausa de 5 s.
+- Si se pierde la conexión AMQP, el worker termina y Docker lo reinicia (`restart: unless-stopped`). Los mensajes sin ACK se reentregan.
+
 ## 11. Redis rate limiting
 
 El límite de Groq es global.
@@ -238,6 +261,13 @@ El límite de Groq es global.
 Todos los workers comparten el mismo estado en Redis.
 
 No implementar un bucket separado en memoria local.
+
+Implementación: ventana fija de 60 s con `INCR` + `PEXPIRE` atómicos (script Lua) sobre `ratelimit:groq`, con límite `GROQ_RATE_LIMIT_PER_MINUTE`.
+
+- Si el límite se alcanza, la recomendación se pospone hasta que termine la ventana sin consumir un intento.
+- Si Redis no responde, se falla cerrado: Groq no se llama y el intento cuenta como fallo recuperable.
+
+La ventana fija puede permitir ráfagas en el borde de la ventana; un 429 de Groq en ese caso se trata como fallo recuperable.
 
 ## 12. Seguridad
 
@@ -259,6 +289,21 @@ NestJS API
 
 La autorización ocurre en backend.
 
+### Integración de Better Auth
+
+El producto expone únicamente username/password. El registro nativo de Better Auth (`/sign-up/email`) exige `email` y `name`, así que **no se monta su handler catch-all**. Controllers de NestJS implementan el contrato de `docs/API.md` llamando a `auth.api.*`. Better Auth sigue siendo el único mecanismo de auth: hashing, sesiones en PostgreSQL y cookies.
+
+Al no pasar por su router, se pierden dos protecciones que se compensan así:
+
+- **Rate limiting**: sign-up/sign-in tienen un límite por IP en Redis. Aquí se falla abierto: si Redis cae, el login sigue disponible.
+- **Chequeo de origen**: un middleware rechaza métodos mutantes con `Origin` no confiable.
+
+`SessionGuard` resuelve la sesión con `auth.api.getSession`; el usuario autenticado es la única fuente de identidad.
+
+### Web → API
+
+El navegador solo habla con Next.js. `next.config.ts` reescribe `/api/*` hacia la API, así la cookie de sesión es first-party y no hace falta CORS. Los Server Components y Server Actions llaman a la API por la red interna reenviando la cookie.
+
 ## 13. Docker
 
 Compose:
@@ -267,9 +312,13 @@ Compose:
 postgres
 redis
 rabbitmq
+migrate   (one-shot: prisma migrate deploy)
 api
+worker    (misma imagen que api, entrypoint dist/worker.js)
 web
 ```
+
+`api` y `worker` esperan a que `migrate` termine con éxito. `BACKEND_URL` se pasa a web como build arg, porque los rewrites de Next se resuelven en build.
 
 Dentro de la red Docker:
 
@@ -278,6 +327,8 @@ Dentro de la red Docker:
 - `rabbitmq:5672`
 - `api:3001`
 - `web:3000`
+
+El worker no expone puertos.
 
 Los puertos host se utilizan solamente cuando deben exponerse a la máquina de desarrollo.
 

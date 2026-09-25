@@ -1,31 +1,18 @@
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
-import helmet from 'helmet';
+import { configureApp } from './app.setup.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.use(helmet());
-
-  app.enableCors({
-    origin: process.env.FRONTEND_URL,
-    credentials: true,
-  });
-  app.setGlobalPrefix('api');
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  configureApp(app);
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Movie Recommendation System API')
     .setDescription('REST API for the movie recommendation system')
     .setVersion('0.1.0')
+    .addCookieAuth('better-auth.session_token')
     .build();
 
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);

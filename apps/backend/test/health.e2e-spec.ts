@@ -1,29 +1,16 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
+import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { AppModule } from './../src/app.module.js';
+import { createTestApp } from './utils/test-app.js';
 
 describe('Health check (e2e)', () => {
   let app: INestApplication;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+  beforeAll(async () => {
+    app = await createTestApp();
+  });
 
-    app = moduleFixture.createNestApplication();
-
-    app.setGlobalPrefix('api');
-
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
-
-    await app.init();
+  afterAll(async () => {
+    await app.close();
   });
 
   it('GET /api/health', () => {
@@ -33,10 +20,8 @@ describe('Health check (e2e)', () => {
       .expect(({ body }) => {
         expect(body.status).toBe('ok');
         expect(body.details.memory_heap.status).toBe('up');
+        expect(body.details.database.status).toBe('up');
+        expect(body.details.redis.status).toBe('up');
       });
-  });
-
-  afterEach(async () => {
-    await app.close();
   });
 });

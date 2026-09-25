@@ -48,6 +48,19 @@ GROQ_API_KEY
 BETTER_AUTH_SECRET
 ```
 
+`TMDB_API_KEY` acepta una API key v3 o un read access token v4.
+
+Opcionales (con valores por defecto, ver `.env.example`):
+
+```text
+TMDB_BASE_URL
+GROQ_BASE_URL
+GROQ_MODEL
+GROQ_RATE_LIMIT_PER_MINUTE
+RECOMMENDATION_MAX_ATTEMPTS
+AUTH_RATE_LIMIT_PER_MINUTE
+```
+
 ## 4. Desarrollo local
 
 Scripts principales:
@@ -63,30 +76,50 @@ pnpm test:e2e
 pnpm build
 ```
 
+`pnpm dev` levanta API y web. El worker (relay del outbox + consumer de RabbitMQ) es otro entrypoint:
+
+```bash
+pnpm --filter backend build
+node apps/backend/dist/worker.js
+```
+
+Con `pnpm dev`, el navegador usa `http://localhost:3000`: Next.js reescribe `/api/*` a `BACKEND_URL` (por defecto `http://localhost:3001`).
+
+### Tests e2e
+
+`pnpm test:e2e` usa PostgreSQL y Redis reales, aislados de los datos de desarrollo:
+
+- crea (si falta) la base `<db>_test` y le aplica `prisma migrate deploy`;
+- usa la base lógica 15 de Redis y la vacía al empezar.
+
+TMDB, Groq y RabbitMQ se sustituyen por dobles de test. Requiere `docker compose up -d postgres redis`.
+
 ## 5. Prisma
+
+El archivo de configuración es `apps/backend/prisma7.config.ts`, así que los comandos pasan `--config`.
 
 Generación:
 
 ```bash
-pnpm --filter backend exec prisma generate
+pnpm --filter backend exec prisma generate --config prisma7.config.ts
 ```
 
 Estado:
 
 ```bash
-pnpm --filter backend exec prisma migrate status
+pnpm --filter backend exec prisma migrate status --config prisma7.config.ts
 ```
 
 Migración de desarrollo:
 
 ```bash
-pnpm --filter backend exec prisma migrate dev
+pnpm --filter backend exec prisma migrate dev --config prisma7.config.ts
 ```
 
-Deploy de migraciones:
+Deploy de migraciones (en Docker lo hace el servicio `migrate`):
 
 ```bash
-pnpm --filter backend exec prisma migrate deploy
+pnpm --filter backend exec prisma migrate deploy --config prisma7.config.ts
 ```
 
 No usar `db push` como sustituto de migraciones versionadas.
@@ -98,6 +131,8 @@ Levantar todo:
 ```bash
 docker compose up --build
 ```
+
+Orden de arranque: `postgres`/`redis`/`rabbitmq` healthy → `migrate` (aplica migraciones y termina) → `api` y `worker` → `web`.
 
 Levantar en background:
 

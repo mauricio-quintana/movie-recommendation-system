@@ -173,6 +173,8 @@ No borrar datos relacionados manualmente cuando la relación ya define cascade/s
 
 No utilizar Movie como catálogo completo de TMDB.
 
+Se crea un snapshot solo cuando la película se usa: al darle like o al formar parte de los candidatos de una recomendación. Los snapshots existentes no se sobrescriben.
+
 ### Like
 
 La clave compuesta impide duplicados.
@@ -183,9 +185,18 @@ La clave compuesta impide duplicados.
 
 Antes de guardar `selectedMovieId`, validar la relación lógica con los candidatos.
 
+`attempts` cuenta los intentos de procesamiento y sirve como fencing token en las transiciones del worker. `updatedAt` hace de versión en el claim optimista y marca el lease de `PROCESSING`. Un fallo recuperable devuelve la recomendación a `PENDING` hasta el reintento (ver `docs/ARCHITECTURE.md` §8).
+
 ### Outbox
 
 El evento se crea en la misma transacción que el cambio de estado de negocio que lo origina.
+
+`availableAt` cumple dos funciones:
+
+- **Backoff**: un reintento se programa como un nuevo evento con `availableAt` en el futuro.
+- **Lease del relay**: al reclamar un evento se adelanta `availableAt` 30 s.
+
+`attempts` cuenta los intentos de publicación y `lastError` guarda el último error del broker.
 
 ## 9. Cambios de schema
 
