@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RecommendationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id            String   @id
+  name          String
+  email         String
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  username      String?
+
+  sessions        Session[]
+  accounts        Account[]
+  likes           Like[]
+  recommendations Recommendation[]
+
+  @@unique([email])
+  @@unique([username])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Movie {
+  id               String    @id @default(uuid())
+  tmdbId           Int       @unique
+  title            String
+  originalTitle    String?
+  overview         String?
+  posterPath       String?
+  backdropPath     String?
+  releaseDate      DateTime? @db.Date
+  voteAverage      Float?
+  voteCount        Int?
+  popularity       Float?
+  originalLanguage String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  likes           Like[]
+  recommendations Recommendation[] @relation("SelectedMovie")
+
+  @@index([releaseDate])
+  @@index([popularity])
+  @@map("movie")
+}
+
+model Like {
+  userId    String
+  movieId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@id([userId, movieId])
+  @@index([movieId])
+  @@map("like")
+}
+
+model Recommendation {
+  id     String               @id @default(uuid())
+  userId String
+  status RecommendationStatus @default(PENDING)
+
+  candidateTmdbIds Int[]
+  selectedMovieId  String?
+  reason           String?
+
+  attempts       Int     @default(0)
+  failureCode    String?
+  failureMessage String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectedMovie Movie? @relation("SelectedMovie", fields: [selectedMovieId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("recommendation")
+}
+
+model OutboxEvent {
+  id            String @id @default(uuid())
+  eventType     String
+  aggregateType String
+  aggregateId   String
+  payload       Json
+
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  publishedAt DateTime?
+  lastError   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([publishedAt, availableAt])
+  @@index([aggregateType, aggregateId])
+  @@map("outbox_event")
+}
