@@ -18,6 +18,10 @@
   --color-skeleton-soft: #ecece8;
   --color-placeholder: #ebebe7;
   --color-night: #0b0b0b;
+  /* Errors: text meets WCAG AA contrast on white and on the tinted background. */
+  --color-danger: #b42318;
+  --color-danger-soft: #fef3f2;
+  --color-danger-line: #f4b7b0;
 
   --font-sans: 'Helvetica Neue', Helvetica, system-ui, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
